@@ -1,0 +1,46 @@
+import os
+import logging
+
+from ever.util.param_util import count_model_parameters
+
+from argparse import ArgumentParser
+from hyperdaseg.datasets.daLoader import DALoader
+from hyperdaseg.utils.tools import *
+from hyperdaseg.viz import VisualizeSegmm
+from hyperdaseg.datasets import *
+from hyperdaseg.models import get_model
+from hyperdaseg.gast.metrics import PixelMetricIgnore
+from hyperdaseg.utils.eval import predict
+
+
+if __name__ == '__main__':
+
+    seed_torch(2333)
+
+    parser = ArgumentParser(description='Run predict methods.')
+    parser.add_argument('--config-path', type=str,
+                        default='st.hyperdaseg.2potsdam_segformer',
+                        help='config path')
+    parser.add_argument('--ckpt-path', type=str,
+                        default='log/hyperdaseg/SegFormer_MiT-B2/2potsdam/ssl_proto_sam_0.95/Potsdam_stu_best.pth',
+                        help='ckpt path')
+    parser.add_argument('--test', type=str2bool, default=True, help='evaluate the test/val set')
+    parser.add_argument('--tta', type=str2bool, default=False, help='test time augmentation')
+    args = parser.parse_args()
+
+    cfg = import_config(args.config_path, copy=False, create=False)
+    log_dir = os.path.dirname(args.ckpt_path)
+    cfg.SNAPSHOT_DIR = log_dir
+    logger = get_console_file_logger(name='Baseline', logdir=log_dir)
+
+    class_num = len(eval(cfg.DATASETS).LABEL_MAP)
+    model_name_stu = str(cfg.MODEL_STUDENT)
+    backbone_stu = str(cfg.BACKBONE_STUDENT)
+    pretrained_stu = str(cfg.PRETRAINED_STUDENT)
+
+    # model for semantic segmentation
+    model_stu, feat_channel, down_scale = get_model(class_num, model_name_stu, backbone_stu, pretrained_stu)
+    model_stu = model_stu.cuda()
+    model_stu.train()
+
+    predict(model_stu, cfg, False, args.ckpt_path, logger, tta=args.tta, test=args.test)
